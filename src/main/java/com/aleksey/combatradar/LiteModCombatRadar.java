@@ -19,6 +19,8 @@ import org.lwjgl.input.Keyboard;
 
 import java.io.File;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * @author Aleksey Terzi
@@ -28,6 +30,8 @@ public class LiteModCombatRadar implements Tickable, ChatFilter
 {
     private RadarConfig _config;
     private Radar _radar;
+    private Pattern join_pattern = Pattern.compile(TextFormatting.YELLOW.toString() + "([A-Za-z_0-9]){2,16} joined the game");
+    private Pattern leave_pattern = Pattern.compile(TextFormatting.YELLOW.toString() + "([A-Za-z_0-9]){2,16} left the game");
 
     @Override
     public String getName()
@@ -38,7 +42,7 @@ public class LiteModCombatRadar implements Tickable, ChatFilter
     @Override
     public String getVersion()
     {
-        return "1.1.0";
+        return "1.2.0";
     }
     
     @Override
@@ -151,19 +155,21 @@ public class LiteModCombatRadar implements Tickable, ChatFilter
 
     @Override
     public boolean onChat(ITextComponent chat, String message, LiteLoaderEventBroker.ReturnValue<ITextComponent> newMessage) {
-        if(!_config.getLogPlayerStatus()) {
+        if(!_config.getLogPlayerStatus() || chat == null) {
             return true;
         }
 
-        if(chat != null && message != null) {
-            List<ITextComponent> siblings = chat.getSiblings();
-            TextFormatting color = siblings != null && siblings.size() > 0 ? siblings.get(0).getStyle().getColor() : null;
+        String text = chat.getFormattedText();
 
-            if (color == TextFormatting.YELLOW) {
-                if (message.contains(" joined the game") || message.contains(" left the game")) {
-                    return false;
-                }
-            }
+        if (text.trim().length() == 0) {
+            return true;
+        }
+
+        Matcher join_matcher = join_pattern.matcher(text);
+        Matcher leave_matcher = leave_pattern.matcher(text);
+
+        if (join_matcher.matches() || leave_matcher.matches()) {
+            return false;
         }
 
         return true;

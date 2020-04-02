@@ -6,10 +6,12 @@ import com.aleksey.combatradar.config.PlayerType;
 import com.aleksey.combatradar.config.PlayerTypeInfo;
 import com.aleksey.combatradar.config.RadarConfig;
 import com.aleksey.combatradar.entities.*;
+import com.mojang.authlib.GameProfile;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.AbstractClientPlayer;
 import net.minecraft.client.entity.EntityOtherPlayerMP;
 import net.minecraft.client.gui.ScaledResolution;
+import net.minecraft.client.network.NetHandlerPlayClient;
 import net.minecraft.client.network.NetworkPlayerInfo;
 import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.BufferBuilder;
@@ -21,14 +23,13 @@ import net.minecraft.entity.item.EntityMinecart;
 import net.minecraft.entity.item.EntityXPOrb;
 import net.minecraft.init.Items;
 import net.minecraft.item.ItemStack;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.SoundEvent;
 import net.minecraft.util.text.*;
 import net.minecraft.util.text.event.ClickEvent;
 import net.minecraft.util.text.event.HoverEvent;
 import org.lwjgl.opengl.GL11;
 
 import java.util.*;
+import java.util.List;
 
 /**
  * @author Aleksey Terzi
@@ -49,7 +50,7 @@ public class Radar
         }
     }
 
-    private enum MessageReason { Login, Logout, Appeared, Disappeared}
+    private enum MessageReason { Login, Logout, Appeared, Disappeared }
     private static class MessageInfo {
         public String playerName;
         public PlayerInfo playerInfo;
@@ -254,7 +255,7 @@ public class Radar
         glDisableBlend();
     }
 
-    public int scanEntities(Minecraft minecraft) {
+    public void scanEntities(Minecraft minecraft) {
         _entities.clear();
         _sounds.clear();
         _messages.clear();
@@ -264,14 +265,12 @@ public class Radar
         if(_config.getLogPlayerStatus()) {
             scanOnlinePlayers(minecraft);
         }
-
-        return _entities.size();
     }
 
     private void scanRadarEntities(Minecraft minecraft) {
         Map<UUID, PlayerInfo> oldPlayers = _radarPlayers;
 
-        _radarPlayers = new HashMap<UUID, PlayerInfo>();
+        _radarPlayers = new HashMap<>();
 
         EntitySettings settings = createEntitySettings();
 
@@ -349,21 +348,27 @@ public class Radar
         return settings;
     }
 
+    // TODO Update across worlds
     private void scanOnlinePlayers(Minecraft minecraft) {
-        Collection<NetworkPlayerInfo> players = minecraft.getConnection().getPlayerInfoMap();
+        NetHandlerPlayClient connection = minecraft.getConnection();
+
+        if (connection == null)
+            return;
+
+        Collection<NetworkPlayerInfo> players = connection.getPlayerInfoMap();
         Map<UUID, String> oldOnlinePlayers = _onlinePlayers;
 
-        _onlinePlayers = new HashMap<UUID, String>();
+        _onlinePlayers = new HashMap<>();
 
         for(NetworkPlayerInfo p : players) {
-            UUID playerKey = p.getGameProfile().getId();
+            GameProfile gameProfile = p.getGameProfile();
+            UUID playerKey = gameProfile.getId();
 
             if(playerKey.equals(minecraft.player.getUniqueID())) {
                 continue;
             }
 
             String playerName = TextFormatting.getTextWithoutFormattingCodes(p.getGameProfile().getName());
-
             _onlinePlayers.put(playerKey, playerName);
 
             if(oldOnlinePlayers == null || !oldOnlinePlayers.containsKey(playerKey)) {
@@ -385,7 +390,6 @@ public class Radar
                 MessageInfo message = _messages.get(playerKey);
 
                 if (message != null) {
-                    message.reason = MessageReason.Logout;
                     message.log = true;
                 } else {
                     _messages.put(playerKey, new MessageInfo(oldOnlinePlayers.get(playerKey), MessageReason.Logout));
@@ -409,7 +413,17 @@ public class Radar
     }
 
     private void sendMessage(Minecraft minecraft, MessageInfo messageInfo) {
-        ITextComponent text = new TextComponentString("[CombatRadar] ").setStyle(new Style().setColor(TextFormatting.DARK_AQUA));
+        // CIVREALMS -----------
+        // Ignore repeat messages from fake tab list players
+        if (messageInfo.playerName.contains("BTLP Slot"))
+            return;
+        // /CIVREALMS ----------
+
+        Style style = new Style();
+        style.setColor(TextFormatting.DARK_AQUA);
+        ITextComponent hover = new TextComponentString("SkyNet informs you of players joining and leaving the game. It is a function of CombatRadar.");
+        style.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, hover));
+        ITextComponent text = new TextComponentString("[Sky] ").setStyle(style);
 
         TextFormatting playerColor;
         PlayerType playerType = _config.getPlayerType(messageInfo.playerName);
@@ -511,11 +525,11 @@ public class Radar
         }
 
         coordText.append("x:");
-        coordText.append((int)playerInfo.posX);
+        coordText.append((int) playerInfo.posX);
         coordText.append(", y:");
-        coordText.append((int)playerInfo.posY);
+        coordText.append((int) playerInfo.posY);
         coordText.append(", z:");
-        coordText.append((int)playerInfo.posZ);
+        coordText.append((int) playerInfo.posZ);
 
         if(includeName) {
             coordText.append(", name:");
